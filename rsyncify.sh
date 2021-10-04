@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-# watches for file changes then pushes the updates to a remove 
-# server
+# watches for file and dir changes that follow a pattern then pushes 
+# the updates to a remote server
 # dependencies: entr, fd 
 
 HOST=dpsdas
@@ -28,29 +28,28 @@ regex="(${regex::-1})"
 # - no need to wait for rsync to (re)connect whenever its used
 # - only need to authenticate once, no password prompts beyond here
 mkdir -p ~/.ssh/ctl
-# n: stdin from /dev/null, N: do not execute remote cmd, f: go to background
 ctrl_path="$HOME/.ssh/%L-%r@%h:%p" 
+# n: stdin from /dev/null, N: do not execute remote cmd, f: go to background
+# controlmaster=auto: reuse existing ssh open session if availible otherwise
+# master, if the other session closes ends this ssh session will keep the
+# connection going
 ssh -nNf \
 	-o ControlPersist=yes \
-	-o ControlMaster=yes \
+	-o ControlMaster=auto \
 	-o ControlPath=$ctrl_path \
 	$HOST
 
 ssh_cmd="ssh -o ControlPath=$ctrl_path"
-# echo "$ssh_cmd"
-# cmd=$(echo "fd --type f \"$regex\" . | rsync \
-# 	--rsh="$ssh_cmd" \
-# 	--relative \
-# 	--verbose \
-# 	--files-from=- . $HOST:$REMOTE_DIR")
-
-fd --type f \"$regex\" . | rsync \
-	--rsh="$ssh_cmd" \
+cmd=$(echo "fd --type f \"$regex\" . | rsync \
+	--rsh=\"$ssh_cmd\" \
 	--relative \
-	--verbose \
-	--files-from=- . $HOST:$REMOTE_DIR
+	--files-from=- \
+	. $HOST:$REMOTE_DIR")
 
-# while sleep 2; do
-# 	fd --type f "$regex" . | entr -ds "$cmd"
-# done
+# this will run rsync once then wait for changes in the watched files
+# and the directories they are in (thanks to entr -d). On change in dir
+# the watched files list is updated
+while true; do
+	fd --type f "$regex" . | entr -ds "$cmd" || true
+done
 
