@@ -39,17 +39,20 @@ ssh -nNf \
 	-o ControlPath=$ctrl_path \
 	$HOST
 
+# we preserve modification times or we will
+# have to copy everything over every time
 ssh_cmd="ssh -o ControlPath=$ctrl_path"
 cmd=$(echo "fd --type f \"$regex\" . | rsync \
 	--rsh=\"$ssh_cmd\" \
 	--relative \
+	--times \
 	--files-from=- \
 	. $HOST:$REMOTE_DIR")
 
 # this will run rsync once then wait for changes in the watched files
 # and the directories they are in (thanks to entr -d). On change in dir
 # the watched files list is updated
-while true; do
+while sleep 0.1; do
 	fd --type f "$regex" . | entr -ds "$cmd" || true
 done
 
